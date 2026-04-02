@@ -1,0 +1,559 @@
+*ha.nvim.txt*    Home Assistant integration for Neovim
+
+Author:   ha.nvim contributors
+License:  MIT License
+Homepage: https://github.com/szsolt/ha.nvim
+
+==============================================================================
+CONTENTS                                                    *ha.nvim-contents*
+
+  1. Introduction .......................... |ha.nvim-introduction|
+  2. Requirements .......................... |ha.nvim-requirements|
+  3. Installation .......................... |ha.nvim-installation|
+  4. Configuration ......................... |ha.nvim-configuration|
+  5. Authentication ........................ |ha.nvim-authentication|
+  6. Commands .............................. |ha.nvim-commands|
+  7. Pickers ............................... |ha.nvim-pickers|
+  8. Keymaps ............................... |ha.nvim-keymaps|
+  9. Completion ............................ |ha.nvim-completion|
+  10. Diagnostics .......................... |ha.nvim-diagnostics|
+  11. LSP .................................. |ha.nvim-lsp|
+  12. Hover ................................ |ha.nvim-hover|
+  13. Registry ............................. |ha.nvim-registry|
+  14. Statusline ........................... |ha.nvim-statusline|
+  15. Health Check ......................... |ha.nvim-health|
+  16. Troubleshooting ...................... |ha.nvim-troubleshooting|
+  17. API .................................. |ha.nvim-api|
+
+==============================================================================
+1. INTRODUCTION                                         *ha.nvim-introduction*
+
+ha.nvim is a comprehensive Home Assistant integration for Neovim. It connects
+to your Home Assistant instance via WebSocket, providing real-time entity
+completion, inline diagnostics, interactive pickers, and service management
+directly from your editor.
+
+==============================================================================
+2. REQUIREMENTS                                         *ha.nvim-requirements*
+
+Required:~
+  - Neovim >= 0.10 (0.11+ recommended for native LSP)
+  - websocat        WebSocket CLI client
+  - plenary.nvim    HTTP requests and async utilities
+  - blink.cmp       Completion engine
+  - snacks.nvim     Picker UI
+
+Optional:~
+  - mason.nvim      Auto-install HA Language Server
+  - lualine.nvim    Statusline integration
+  - which-key.nvim  Keymap discovery
+  - Node.js         Required for HA Language Server
+
+==============================================================================
+3. INSTALLATION                                         *ha.nvim-installation*
+
+With lazy.nvim: >lua
+
+  {
+    "szsolt/ha.nvim",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "saghen/blink.cmp",
+      "folke/snacks.nvim",
+    },
+    ft = { "yaml", "home-assistant" },
+    cmd = { "Ha" },
+    event = "VeryLazy",
+    opts = {},
+    config = function(_, opts)
+      require("ha").setup(opts)
+    end,
+  }
+<
+
+==============================================================================
+4. CONFIGURATION                                       *ha.nvim-configuration*
+
+Call `require("ha").setup(opts)` with a table of options. All options are
+optional and have sensible defaults.
+
+                                                        *ha.nvim-config-lsp*
+lsp~
+  `enabled`       (boolean, default: false)
+                  Enable the Home Assistant Language Server.
+  `auto_setup`    (boolean, default: true)
+                  Auto-setup LSP when enabled in HA workspaces.
+  `server_path`   (string|nil, default: nil)
+                  Path to HA language server. Auto-detected if nil.
+
+                                                        *ha.nvim-config-auth*
+auth~
+  `auto_migrate`  (boolean, default: true)
+                  Auto-migrate credentials from VS Code settings.
+  `storage_file`  (string, default: "ha_credentials")
+                  Credential storage file name in stdpath('data').
+
+                                                         *ha.nvim-config-ui*
+ui~
+  `statusline.enabled`    (boolean, default: true)
+  `notifications.enabled` (boolean, default: true)
+  `notifications.timeout` (number, default: 5000) Milliseconds.
+  `progress.enabled`      (boolean, default: true)
+  `progress.spinner_type` (string, default: "braille")
+                          Options: "braille", "wheel", "ascii", "none"
+
+                                                 *ha.nvim-config-completion*
+completion~
+  `enabled`       (boolean, default: true)
+  `sources`       (table) Per-source configuration with `enabled` and
+                  `priority` keys. Sources: `ha_entities`, `ha_services`,
+                  `ha_domains`, `ha_mdi_icons`, `ha_integrations`.
+
+                                                *ha.nvim-config-diagnostics*
+diagnostics~
+  `enabled`             (boolean, default: true)
+  `on_change`           (boolean, default: true)
+                        Run diagnostics on text change.
+  `debounce_ms`         (number, default: 1000)
+                        Debounce delay in milliseconds.
+  `validate_entities`   (boolean, default: true)
+  `validate_services`   (boolean, default: true)
+  `severity`            (string, default: "warn")
+
+                                                        *ha.nvim-config-api*
+api~
+  `timeout`       (number, default: 10000) Request timeout in ms.
+  `retry_count`   (number, default: 3)
+  `retry_delay`   (number, default: 1000) Retry delay in ms.
+
+                                                  *ha.nvim-config-workspace*
+workspace~
+  `auto_detect`   (boolean, default: true)
+  `indicators`    (table) List of filenames that identify an HA workspace.
+                  Default: "configuration.yaml", ".storage",
+                  "home-assistant_v2.db", "automations.yaml",
+                  "scripts.yaml", "scenes.yaml"
+
+==============================================================================
+5. AUTHENTICATION                                   *ha.nvim-authentication*
+
+Before using ha.nvim, set up credentials for your Home Assistant instance.
+
+Setup:~
+  1. Run `:Ha auth setup`
+  2. Enter your Home Assistant URL (e.g., http://homeassistant.local:8123)
+  3. Enter a Long-Lived Access Token from your HA profile page
+     (Profile → Long-Lived Access Tokens → Create Token)
+
+Credentials are encrypted with a simple XOR cipher and stored in
+`stdpath('data')/ha_credentials`.
+
+VS Code migration:~
+  If you have the VS Code Home Assistant extension configured, credentials
+  are automatically migrated on first launch when `auth.auto_migrate = true`.
+
+Commands:~
+  `:Ha auth setup`    Interactive credential setup
+  `:Ha auth test`     Test connection and authentication
+  `:Ha auth show`     Show current auth details (token obscured)
+  `:Ha auth clear`    Clear stored credentials
+
+==============================================================================
+6. COMMANDS                                               *ha.nvim-commands*
+
+All commands are available under the `:Ha` prefix. Tab completion is
+supported for all subcommands.
+
+                                                                        *:Ha*
+:Ha                     Show command picker with all available commands.
+
+:Ha auth setup          Interactive credential setup.
+:Ha auth test           Test connection and authentication.
+:Ha auth show           Show current auth details (token obscured).
+:Ha auth clear          Clear stored credentials.
+
+:Ha entities [id]       Open entity picker. If [id] is provided or cursor is
+                        on an entity ID, the picker focuses that entity.
+:Ha services            Open service picker.
+:Ha integrations        Open integration browser.
+
+:Ha template            Render Jinja2 template from current line or visual
+                        selection. Results shown in output channel.
+:Ha template help       Show template syntax help.
+
+:Ha reload list         Show reload options picker.
+:Ha reload automations  Reload automations.
+:Ha reload scripts      Reload scripts.
+:Ha reload scenes       Reload scenes.
+:Ha reload groups       Reload groups.
+:Ha reload all          Reload all configuration.
+
+:Ha restart             Restart Home Assistant.
+:Ha status              Show connection status and registry info.
+:Ha log                 Show Home Assistant error log.
+:Ha open                Open Home Assistant in browser.
+
+:Ha diagnostics run     Run diagnostics on current buffer.
+:Ha diagnostics clear   Clear diagnostics from current buffer.
+:Ha diagnostics refresh Refresh diagnostics for all HA buffers.
+:Ha diagnostics stats   Show diagnostics statistics.
+
+:Ha lsp toggle          Toggle HA Language Server on/off.
+:Ha lsp start           Start HA Language Server.
+:Ha lsp stop            Stop HA Language Server.
+:Ha lsp restart         Restart HA Language Server.
+:Ha lsp status          Show LSP status.
+
+==============================================================================
+7. PICKERS                                                 *ha.nvim-pickers*
+
+Pickers are powered by snacks.nvim and provide fuzzy search, live preview,
+multi-select, and buffer insertion.
+
+                                                     *ha.nvim-entity-picker*
+Entity Picker~
+
+Open with `:Ha entities` or `<localleader>he`.
+
+Shows all entities from your Home Assistant instance with real-time data.
+If your cursor is on an entity ID when you open the picker, it will
+automatically focus that entity.
+
+Entity picker keybindings:~
+
+  `<CR>`          Confirm selection (invokes callback).
+  `<Esc>`         Close picker.
+  `<Tab>`         Toggle selection for multi-select.
+  `<C-s>`         Insert selected entity ID(s) into buffer at cursor.
+  `<C-d>`         Filter by domain (e.g., light, sensor, switch).
+  `<C-l>`         Filter by area/location (e.g., Living Room, Kitchen).
+  `<C-p>`         Filter by platform (e.g., mqtt, zwave, zigbee).
+  `<C-u>`         Filter by device class (e.g., temperature, power).
+  `<C-h>`         Toggle showing unavailable entities.
+  `<C-r>`         Reset all filters.
+
+Entity preview shows:~
+  - Entity ID and friendly name
+  - Current state
+  - Unique ID, category, translation key
+  - Area and device information
+  - Platform and domain
+  - All attributes with formatted values
+  - Device details (manufacturer, model, etc.)
+  - Last changed and last updated timestamps
+
+                                                    *ha.nvim-service-picker*
+Service Picker~
+
+Open with `:Ha services` or `<localleader>hS`.
+
+Shows all available services grouped by domain.
+
+Service picker keybindings:~
+
+  `<CR>`          Confirm selection (invokes service call flow).
+  `<Esc>`         Close picker.
+  `<C-s>`         Insert selected service name(s) into buffer at cursor.
+
+Service preview shows:~
+  - Service name (domain.service)
+  - Description
+  - Fields with types, defaults, examples, and required status
+  - Target information (entity domains, device/area targets)
+  - Response information
+
+                                                *ha.nvim-integration-picker*
+Integration Picker~
+
+Open with `:Ha integrations` or `<localleader>hi`.
+
+Browse all installed integrations with manifest details and documentation.
+
+                                                     *ha.nvim-reload-picker*
+Reload Picker~
+
+Open with `:Ha reload list`.
+
+Quick access to reload automations, scripts, scenes, groups, input helpers,
+and all configuration.
+
+                                                    *ha.nvim-picker-actions*
+Common Picker Actions~
+
+All pickers support the `<C-s>` insertion action:
+
+  1. Open a picker (e.g., `:Ha entities`)
+  2. Search for items
+  3. Select multiple items with `<Tab>` (optional)
+  4. Press `<C-s>` to insert the selected item(s) at the cursor position
+
+Single items are inserted inline. Multiple items are inserted on separate
+lines.
+
+==============================================================================
+8. KEYMAPS                                                 *ha.nvim-keymaps*
+
+Default keymaps use the `<localleader>h` prefix. If your localleader is
+`,` then the keymaps are `,h<key>`.
+
+  `<localleader>h`      Show Home Assistant menu (which-key).
+  `<localleader>ha`     Setup authentication.
+  `<localleader>ht`     Render template.
+  `<localleader>hT`     Template help.
+  `<localleader>he`     Entity picker.
+  `<localleader>hS`     Service picker.
+  `<localleader>hi`     Integration picker.
+  `<localleader>hr`     Reload services.
+  `<localleader>hR`     Restart Home Assistant.
+  `<localleader>hs`     Show status.
+  `<localleader>hl`     Show error log.
+  `<localleader>ho`     Open in browser.
+  `<localleader>hd`     Run diagnostics.
+  `<localleader>hD`     Clear diagnostics.
+  `<localleader>hL`     Toggle HA LSP.
+  `K`                   Hover entity info (falls back to LSP hover).
+
+Visual mode:~
+
+  `<localleader>ht`     Render selected text as template.
+
+==============================================================================
+9. COMPLETION                                           *ha.nvim-completion*
+
+Completion is provided through blink.cmp with the following sources:
+
+                                                   *ha.nvim-entity-complete*
+ha_entities~
+  Triggers after typing a domain prefix (e.g., `light.`, `sensor.`).
+  Shows entity IDs with friendly names and current state from the live
+  registry. Context-aware: filters by domain prefix.
+
+                                                  *ha.nvim-service-complete*
+ha_services~
+  Completes `domain.service` names with descriptions. Triggers in
+  service-related YAML contexts.
+
+                                                   *ha.nvim-domain-complete*
+ha_domains~
+  Completes domain names extracted dynamically from your entity registry.
+  Highest priority source.
+
+                                              *ha.nvim-integration-complete*
+ha_integrations~
+  Completes integration domain names.
+
+                                                      *ha.nvim-mdi-complete*
+ha_mdi_icons~
+  Triggers after `mdi:` prefix for Material Design Icons.
+
+==============================================================================
+10. DIAGNOSTICS                                       *ha.nvim-diagnostics*
+
+ha.nvim validates YAML files against the live Home Assistant registry using
+Neovim's built-in diagnostic framework (|vim.diagnostic|).
+
+Validated references:~
+  - `entity_id:` values — warns if entity doesn't exist in registry
+  - `service:` values — warns if domain is unknown
+  - Entity IDs in lists (`- sensor.example`)
+  - Generic domain.name patterns in value positions
+
+Special handling:~
+  - Comments (`# ...`) are skipped
+  - Numeric values (e.g., `0.5`) are not treated as entity IDs
+  - System domains (homeassistant, persistent_notification, etc.) are
+    always considered valid
+  - Diagnostics are deduplicated per line/column/message
+
+Autocommands:~
+  Diagnostics run automatically on `BufEnter`, `BufWritePost`, and
+  optionally on `TextChanged`/`TextChangedI` (debounced, configurable).
+
+Namespace:~
+  Diagnostics use the `ha_diagnostics` namespace. You can control their
+  display with standard |vim.diagnostic.config()| options.
+
+==============================================================================
+11. LSP                                                       *ha.nvim-lsp*
+
+ha.nvim integrates with the Home Assistant Language Server for schema
+validation, hover documentation, and additional completion.
+
+The LSP is disabled by default. Toggle with `<localleader>hL` or
+`:Ha lsp toggle`.
+
+Server detection order:~
+  1. Configured `lsp.server_path`
+  2. Mason installation (`home-assistant-language-server`)
+  3. Legacy locations
+
+Mason auto-install:~
+  When mason.nvim is available and `lsp.dynamic.auto_install` is true,
+  the server is automatically installed on first use.
+
+Authentication:~
+  Credentials are forwarded to the LSP server via
+  `workspace/didChangeConfiguration` notifications.
+
+==============================================================================
+12. HOVER                                                   *ha.nvim-hover*
+
+Press `K` with the cursor on an entity ID to see a floating window with:
+
+  - Friendly name and current state
+  - Unit of measurement
+  - Area and device information
+  - Platform
+  - All attributes
+  - Last changed timestamp
+
+If the cursor is not on an entity ID, `K` falls back to standard LSP
+hover (|vim.lsp.buf.hover()|).
+
+The hover function checks if you are in a Home Assistant environment
+before attempting entity lookup, so it will not interfere with `K` in
+non-HA files.
+
+==============================================================================
+13. REGISTRY                                             *ha.nvim-registry*
+
+ha.nvim maintains an in-memory registry that mirrors your Home Assistant
+instance. The registry is populated via WebSocket on first use and kept
+up-to-date with real-time subscriptions.
+
+Registry contents:~
+  - Areas — all defined areas/rooms
+  - Devices — all registered devices with manufacturer, model info
+  - Entities — all entities enriched with device names, area resolution,
+    and current state
+  - Integrations — all installed integrations
+
+Entity enrichment:~
+  Entities are enriched with additional data:
+  - `device_name` resolved from device registry
+  - `area_id` resolved from entity or device area assignment
+  - `state` and `attributes` from state subscriptions
+  - `device` table with full device details
+
+Real-time updates:~
+  The registry subscribes to WebSocket events for:
+  - State changes (entity state updates)
+  - Area registry updates
+  - Device registry updates
+  - Entity registry updates
+
+==============================================================================
+14. STATUSLINE                                         *ha.nvim-statusline*
+
+ha.nvim provides a statusline component showing the connection status.
+
+With lualine: >lua
+
+  table.insert(opts.sections.lualine_x, {
+    function()
+      return require("ha.ui.status").get_status_text()
+    end,
+    cond = function()
+      return require("ha.utils").workspace.is_in_ha_environment()
+    end,
+  })
+<
+
+Status colors:~
+  Green   — Connected
+  Orange  — Connecting
+  Red     — Error
+  Gray    — Disconnected
+
+==============================================================================
+15. HEALTH CHECK                                           *ha.nvim-health*
+
+Run `:checkhealth ha` to verify:
+
+  - Plugin initialization status
+  - Workspace detection
+  - Authentication credentials
+  - LSP client status
+  - Connection status
+  - Registry system and cache
+  - Diagnostics system
+  - Required and optional dependencies
+
+==============================================================================
+16. TROUBLESHOOTING                               *ha.nvim-troubleshooting*
+
+No completion items:~
+  1. Ensure you're in an HA workspace (`:Ha status`)
+  2. Verify authentication (`:Ha auth test`)
+  3. Entity completion triggers after a domain prefix (type `light.`)
+  4. Check blink.cmp sources are registered
+
+Connection issues:~
+  1. Ensure `websocat` is installed and in your PATH
+  2. Verify your HA URL is accessible
+  3. Check your access token is valid
+  4. Run `:checkhealth ha`
+
+Diagnostics false positives:~
+  - Float values (0.5, 1.23) are automatically ignored
+  - System domains are always valid
+  - If registry is not initialized, no diagnostics are produced
+  - Use `:Ha diagnostics clear` to dismiss
+
+LSP not starting:~
+  1. Ensure Node.js is installed
+  2. Check `:Ha lsp status`
+  3. Enable with `:Ha lsp toggle` (disabled by default)
+  4. Try `:Ha lsp restart`
+
+==============================================================================
+17. API                                                       *ha.nvim-api*
+
+Lua API for programmatic access:
+
+>lua
+  local ha = require("ha")
+
+  -- Setup
+  ha.setup(opts)
+
+  -- Authentication
+  local auth = require("ha.auth")
+  auth.has_credentials()
+  auth.get_token()
+  auth.get_url()
+
+  -- Registry
+  local registry = require("ha.utils.registry")
+  registry.get_entity("sensor.temperature")
+  registry.get_all_entities()
+  registry.get_areas()
+  registry.get_devices()
+  registry.get_available_domains()
+
+  -- API calls
+  local api = require("ha.api")
+  api.call_service("light", "turn_on", { entity_id = "light.living_room" }, callback)
+  api.get_states(callback)
+
+  -- LSP
+  local lsp = require("ha.lsp")
+  lsp.get_client()
+  lsp.show_entity_hover("sensor.temperature")
+  lsp.stop()
+  lsp.restart()
+
+  -- Diagnostics
+  local diagnostics = require("ha.diagnostics")
+  diagnostics.diagnose_buffer(bufnr)
+  diagnostics.clear(bufnr)
+  diagnostics.refresh_all()
+  diagnostics.get_stats()
+
+  -- Commands
+  local commands = require("ha.commands")
+  commands.get_entity_under_cursor()
+<
+
+==============================================================================
+ vim:tw=78:ts=8:ft=help:norl:

@@ -1,0 +1,16 @@
+# Neovim
+ha/doc/tags
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Credentials (never commit)
+ha_credentials
