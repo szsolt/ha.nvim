@@ -418,7 +418,18 @@ end
 -- Authentication commands (unchanged - these are essential)
 function M.auth_setup()
   auth.setup_credentials(function(success, result)
-    if success then require("ha").check_connection() end
+    if success then
+      -- Disconnect existing WebSocket so it reconnects with new credentials
+      api.disconnect()
+      -- Check connection and reload registry (triggers WS reconnect)
+      local ha = require "ha"
+      ha.check_connection(false)
+      vim.schedule(function() utils.registry.refresh(function() end) end)
+      -- Update LSP with new credentials if active
+      local lsp = require "ha.lsp"
+      local lsp_client = lsp.get_client()
+      if lsp_client then lsp.send_auth_update(lsp_client) end
+    end
   end)
 end
 
@@ -445,11 +456,13 @@ end
 
 function M.auth_show()
   local details = auth.get_auth_details()
+  local source_label = ({ storage = "stored", env = "environment", none = "none" })[details.source] or "unknown"
   local lines = {
     "Authentication Details:",
     "",
     "URL: " .. (details.url or "Not set"),
     "Token: " .. (details.token or "Not set"),
+    "Source: " .. source_label,
     "Status: " .. (details.has_credentials and "✓ Configured" or "✗ Not configured"),
   }
   ui.show_info(lines)

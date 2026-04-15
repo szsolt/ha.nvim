@@ -53,12 +53,24 @@ local function encrypt(data, key)
   end
 end
 
----Get encryption key based on Neovim installation
+---Get encryption key based on Neovim data path
 ---@return string Encryption key
 local function get_encryption_key()
-  local nvim_version = vim.version()
   local data_path = vim.fn.stdpath "data"
-  return nvim_version.major .. "." .. nvim_version.minor .. data_path
+  return "ha.nvim" .. data_path
+end
+
+---Get legacy encryption key (version-dependent, for migration)
+---@return string[] List of legacy keys to try
+local function get_legacy_encryption_keys()
+  local data_path = vim.fn.stdpath "data"
+  local nvim_version = vim.version()
+  local keys = {}
+  -- Try current and nearby versions for migration
+  for minor = nvim_version.minor, math.max(0, nvim_version.minor - 5), -1 do
+    table.insert(keys, nvim_version.major .. "." .. minor .. data_path)
+  end
+  return keys
 end
 
 ---Load credentials from secure storage
@@ -86,12 +98,31 @@ function M.load_credentials()
     return
   end
 
-  -- Decrypt content
+  -- Try current encryption key first
   local key = get_encryption_key()
   local decrypted = encrypt(content, key) -- XOR is symmetric
-
-  -- Parse JSON
   local ok, data = pcall(vim.fn.json_decode, decrypted)
+
+  -- Fall back to legacy version-dependent keys (migration from older ha.nvim)
+  if not ok or type(data) ~= "table" then
+    for _, legacy_key in ipairs(get_legacy_encryption_keys()) do
+      decrypted = encrypt(content, legacy_key)
+      ok, data = pcall(vim.fn.json_decode, decrypted)
+      if ok and type(data) == "table" and data.token and data.url then
+        -- Re-encrypt with stable key so this migration only happens once
+        utils.logger.info "Migrating credentials to version-independent encryption"
+        local json = vim.fn.json_encode { token = data.token, url = data.url }
+        local encrypted = encrypt(json, key)
+        local wfile = io.open(filepath, "w")
+        if wfile then
+          wfile:write(encrypted)
+          wfile:close()
+        end
+        break
+      end
+    end
+  end
+
   if not ok or type(data) ~= "table" then
     _state.token = nil
     _state.url = nil
@@ -143,18 +174,18 @@ function M.save_credentials(token, url)
   utils.logger.info "Credentials saved successfully"
 end
 
----Get stored token
+---Get stored token (falls back to HASS_TOKEN env var)
 ---@return string? Token or nil if not set
 function M.get_token()
   M.load_credentials()
-  return _state.token
+  return _state.token or vim.env.HASS_TOKEN
 end
 
----Get stored URL
+---Get stored URL (falls back to HASS_URL env var)
 ---@return string? URL or nil if not set
 function M.get_url()
   M.load_credentials()
-  return _state.url
+  return _state.url or vim.env.HASS_URL
 end
 
 ---Check if credentials are available
@@ -238,7 +269,7 @@ function M.migrate_from_vscode()
 end
 
 ---Get authentication details for display (with obscured token)
----@return table Auth details with obscured token
+---@return table Auth details with obscured token and source info
 function M.get_auth_details()
   local token = M.get_token()
   local url = M.get_url()
@@ -252,10 +283,19 @@ function M.get_auth_details()
     end
   end
 
+  -- Determine credential source
+  local source = "none"
+  if _state.token and _state.url then
+    source = "storage"
+  elseif vim.env.HASS_TOKEN or vim.env.HASS_URL then
+    source = "env"
+  end
+
   return {
     url = url,
     token = obscured_token,
     has_credentials = M.has_credentials(),
+    source = source,
   }
 end
 
