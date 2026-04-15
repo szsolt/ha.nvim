@@ -203,7 +203,7 @@ function M.auto_install_via_mason()
 
   if not mason_registry.has_package "home-assistant-language-server" then
     utils.logger.error "Home Assistant language server not available in Mason registry"
-    utils.logger.error "Please check your Mason configuration includes the ha-mason-registry"
+    utils.logger.error "Please check your Mason configuration includes the ha.mason-registry"
     return
   end
 

@@ -34,7 +34,7 @@ local function setup_mason_registry()
   local registries = current.registries or { "github:mason-org/mason-registry" }
 
   -- Add our registry if not already present
-  local ha_registry = "lua:ha-mason-registry"
+  local ha_registry = "lua:ha.mason-registry"
   local found = false
   for _, reg in ipairs(registries) do
     if reg == ha_registry then
@@ -46,7 +46,7 @@ local function setup_mason_registry()
   if not found then
     table.insert(registries, 1, ha_registry)
     mason.setup({ registries = registries })
-    utils.logger.info "Registered ha-mason-registry with Mason"
+    utils.logger.info "Registered ha.mason-registry with Mason"
   end
 end
 
